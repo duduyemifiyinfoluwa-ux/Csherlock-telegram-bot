@@ -1,101 +1,84 @@
 import asyncio
 import logging
+import os
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
     ContextTypes,
+    MessageHandler,
     filters,
 )
 
-# 1. SETUP LOGGING (Shows errors in your terminal)
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-
-# REPLACE THIS WITH YOUR ACTUAL BOT TOKEN FROM BOTFATHER
-BOT_TOKEN = "8963839200:AAGsPNOZZyvq19bsL5gUvx541eJscl-0NH0"
+# --- 1. DUMMY WEB SERVER FOR RENDER ---
+web_app = Flask(__name__)
 
 
-# 2. START COMMAND (/start)
+@web_app.route("/")
+def home():
+    return "Sherlock Terminal is Online!"
+
+
+def run_flask():
+    # Render automatically assigns a PORT variable
+    port = int(os.environ.get("PORT", 8080))
+    web_app.run(host="0.0.0.0", port=port)
+
+
+# --- 2. TELEGRAM BOT LOGIC ---
+logging.basicConfig(level=logging.INFO)
+
+# Fetch token from Render Environment Variables for security
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = (
+    await update.message.reply_text(
         "🔍 *SHERLOCK DETECTIVE TERMINAL ONLINE*\n\n"
-        "Welcome, Investigator. Clues requested here will disappear rapidly.\n\n"
-        "Available commands:\n"
-        "/clue1 - Retrieve classified scene note (Self-destructs in 15s)\n"
-        "Or type the password solution directly into this chat."
+        "Welcome, Investigator. System hosted on Cloud 24/7.\n\n"
+        "Type /clue1 to view current evidence.",
+        parse_mode="Markdown",
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
 
-# 3. TIMED CLUE HANDLER (Self-destructs after X seconds)
 async def clue1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # Send the clue message
     clue_msg = await context.bot.send_message(
         chat_id=chat_id,
         text="⚠️ *CLASSIFIED EVIDENCE #1*\n\n"
-        "\"The clock stopped at 03:14 AM, but the victim's tea was still boiling hot.\"\n\n"
+        '"The clock stopped at 03:14 AM, but the victim\'s tea was still boiling hot."\n\n'
         "⏱️ *This message will self-destruct in 15 seconds!*",
         parse_mode="Markdown",
     )
 
-    # Wait for 15 seconds
     await asyncio.sleep(15)
 
-    # Delete the clue message automatically
     try:
         await context.bot.delete_message(
             chat_id=chat_id, message_id=clue_msg.message_id
         )
-        # Optional notification that clue expired
         await context.bot.send_message(
             chat_id=chat_id,
-            text="❌ *EVIDENCE DESTROYED.* You were too slow!",
+            text="❌ *EVIDENCE DESTROYED.* Time expired!",
             parse_mode="Markdown",
         )
     except Exception as e:
-        print(f"Could not delete message: {e}")
+        print(f"Error deleting message: {e}")
 
 
-# 4. PASSWORD & ANSWER CHECKER
-async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text.strip().lower()
-
-    # Define your correct puzzle answer here
-    CORRECT_ANSWER = "boiler"
-
-    if user_input == CORRECT_ANSWER:
-        success_text = (
-            "🔓 *ACCESS GRANTED*\n\n"
-            "Correct answer! Return to the WhatsApp chat and tell everyone "
-            "the passkey is: **RED HERRING**."
-        )
-        await update.message.reply_text(success_text, parse_mode="Markdown")
-    else:
-        await update.message.reply_text(
-            "🚫 *ACCESS DENIED.* Incorrect password. Try again."
-        )
-
-
-# 5. MAIN BOT RUNNER
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    # Run Flask in the background so it doesn't block the Telegram bot
+    Thread(target=run_flask, daemon=True).start()
 
-    # Register handlers
+    # Run Telegram Bot
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("clue1", clue1))
 
-    # Catch plain text messages to check as password attempts
-    app.add_handler(
-        MessageHandler(filters.TEXT & (~filters.COMMAND), check_answer)
-    )
-
-    print("🕵️‍♂️ Sherlock Bot is running...")
+    print("🕵️‍♂️ Sherlock Bot is running live...")
     app.run_polling()
 
 
